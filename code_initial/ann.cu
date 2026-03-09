@@ -16,8 +16,8 @@ double normalRand(double mu, double sigma)
 {
 	const double epsilon = DBL_MIN;
 	const double two_pi = 2.0*M_PI;
-    bool generate;
-    double z1;
+    static bool generate = false;
+    static double z1;
 
 	generate = !generate;
 
