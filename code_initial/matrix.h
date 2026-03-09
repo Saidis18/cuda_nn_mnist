@@ -36,7 +36,11 @@ void ones(matrix_t *m);
 
 void matrix_memcpy(matrix_t *dest, const matrix_t *src);
 
-__global__ void matrix_op_kernel(double *m1, double *m2, double*res, unsigned size, double (*op)(double, double));
+__global__ void matrix_add_kernel(double *m1, double *m2, double *res, unsigned size);
+
+__global__ void matrix_sub_kernel(double *m1, double *m2, double *res, unsigned size);
+
+__global__ void matrix_hadamard_kernel(double *m1, double *m2, double *res, unsigned size);
 
 __global__ void matrix_dot_kernel(double *m1, double *m2, double *res, unsigned m1_rows, unsigned m1_cols, unsigned m2_cols);
 

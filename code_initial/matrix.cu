@@ -57,12 +57,30 @@ void print_matrix(matrix_t *m, bool is_short)
         printf("...\n");
 }
 
-__global__ void matrix_op_kernel(double *m1, double *m2, double *res, unsigned size, double (*op)(double, double))
+__global__ void matrix_add_kernel(double *m1, double *m2, double *res, unsigned size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size)
     {
-        res[idx] = op(m1[idx], m2[idx]);
+        res[idx] = m1[idx] + m2[idx];
+    }
+}
+
+__global__ void matrix_sub_kernel(double *m1, double *m2, double *res, unsigned size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
+    {
+        res[idx] = m1[idx] - m2[idx];
+    }
+}
+
+__global__ void matrix_hadamard_kernel(double *m1, double *m2, double *res, unsigned size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
+    {
+        res[idx] = m1[idx] * m2[idx];
     }
 }
 
@@ -76,8 +94,7 @@ void hadamard_product(matrix_t *m1, matrix_t *m2, matrix_t *res)
     int size = m1->rows * m1->columns;
     int block_size = 256;
     int grid_size = (size + block_size - 1) / block_size;
-    matrix_op_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size, [](double a, double b)
-                                                { return a * b; });
+    matrix_hadamard_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size);
 }
 
 void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res)
@@ -90,8 +107,7 @@ void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res)
     int size = m1->rows * m1->columns;
     int block_size = 256;
     int grid_size = (size + block_size - 1) / block_size;
-    matrix_op_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size, [](double a, double b)
-                                                { return a + b; });
+    matrix_add_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size);
 }
 
 void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
@@ -104,8 +120,7 @@ void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
     int size = m1->rows * m1->columns;
     int block_size = 256;
     int grid_size = (size + block_size - 1) / block_size;
-    matrix_op_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size, [](double a, double b)
-                                                { return a - b; });
+    matrix_sub_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size);
 }
 
 void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)

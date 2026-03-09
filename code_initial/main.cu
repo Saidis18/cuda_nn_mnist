@@ -45,6 +45,12 @@ __device__ double dsigmoid(double x)
     return sigmoid(x)*(1-sigmoid(x));
 }
 
+__device__ double (*d_sigmoid)(double) = sigmoid;
+__device__ double (*d_dsigmoid)(double) = dsigmoid;
+
+double (*h_sigmoid)(double);
+double (*h_dsigmoid)(double);
+
 double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned minibatch_size, ann_t *nn)
 {
     unsigned good = 0;
@@ -59,7 +65,7 @@ double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned m
         populate_minibatch(x, y, &idx[i], minibatch_size, test_img, 28*28, test_label, 10);
         CHECK_ERROR(cudaMemcpy(nn->layers[0]->activations->m, x, 28*28 * minibatch_size * sizeof(double), cudaMemcpyHostToDevice));     
         
-        forward(nn, sigmoid);
+        forward(nn, h_sigmoid);
         CHECK_ERROR(cudaMemcpy(y, nn->layers[nn->number_of_layers-1]->activations->m, 10 * minibatch_size * sizeof(double), cudaMemcpyDeviceToHost));
         for (int col = 0; col < minibatch_size; col ++)
         {
@@ -121,6 +127,9 @@ int main(int argc, char *argv[])
     nn = create_ann(alpha, minibatch_size, number_of_layers, nneurons_per_layer);
     // print_nn(nn);
 
+    CHECK_ERROR(cudaMemcpyFromSymbol(&h_sigmoid, d_sigmoid, sizeof(double (*)(double))));
+    CHECK_ERROR(cudaMemcpyFromSymbol(&h_dsigmoid, d_dsigmoid, sizeof(double (*)(double))));
+
     printf("starting accuracy %lf\n", accuracy(test_img, test_label, ntest, minibatch_size, nn));
 
     unsigned *shuffled_idx = (unsigned *)malloc(datasize*sizeof(unsigned));
@@ -138,11 +147,11 @@ int main(int argc, char *argv[])
         {
             populate_minibatch(x, y, shuffled_idx+i, minibatch_size, train_img, 28*28, train_label, 10);
             CHECK_ERROR(cudaMemcpy(nn->layers[0]->activations->m, x, 28 * 28 * minibatch_size * sizeof(double), cudaMemcpyHostToDevice));
-            forward(nn, sigmoid);
+            forward(nn, h_sigmoid);
             CHECK_ERROR(cudaMemcpy(out->m, y, 10 * minibatch_size * sizeof(double), cudaMemcpyHostToDevice));            
-            backward(nn, out, dsigmoid);            
+            backward(nn, out, h_dsigmoid);            
         }     
-        printf("epoch %d accuracy %lf\n", epoch, accuracy(test_img, test_label, ntest, minibatch_size, nn));
+        printf("epoch %d accuracy %lf\n", epoch, accuracy(test_img, test_label, ntest, minibatch_size, nn));    
     }
 
     free(x);
