@@ -7,6 +7,7 @@
 #include "mnist.h"
 #include "matrix.h"
 #include "ann.h"
+#include "error.h"
 #include <math.h>
 #include <string.h>
 #include <time.h>
@@ -34,12 +35,12 @@ void shuffle(unsigned *t, const unsigned size, const unsigned number_of_switch)
     }
 }
 
-double sigmoid(double x)
+__device__ double sigmoid(double x)
 {
     return 1 / (1 + exp(-x));
 }
 
-double dsigmoid(double x)
+__device__ double dsigmoid(double x)
 {
     return sigmoid(x)*(1-sigmoid(x));
 }
@@ -56,9 +57,10 @@ double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned m
     for (int i = 0; i < datasize - minibatch_size; i+= minibatch_size)
     {        
         populate_minibatch(x, y, &idx[i], minibatch_size, test_img, 28*28, test_label, 10);
-        memcpy(nn->layers[0]->activations->m, x, 28*28 * minibatch_size * sizeof(double));     
+        CHECK_ERROR(cudaMemcpy(nn->layers[0]->activations->m, x, 28*28 * minibatch_size * sizeof(double), cudaMemcpyHostToDevice));     
         
         forward(nn, sigmoid);
+        CHECK_ERROR(cudaMemcpy(y, nn->layers[nn->number_of_layers-1]->activations->m, 10 * minibatch_size * sizeof(double), cudaMemcpyDeviceToHost));
         for (int col = 0; col < minibatch_size; col ++)
         {
             int idxTrainingData = col + i ;
@@ -66,8 +68,8 @@ double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned m
             unsigned idx_max = 0;
             for (int row = 0; row < 10; row++){
                 int idx = col + row * minibatch_size;
-                if (nn->layers[nn->number_of_layers-1]->activations->m[idx] > max){
-                    max = nn->layers[nn->number_of_layers-1]->activations->m[idx];
+                if (y[idx] > max){
+                    max = y[idx];
                     idx_max = row;
                 }
             }
@@ -117,7 +119,7 @@ int main(int argc, char *argv[])
     unsigned number_of_layers = 3;
     unsigned nneurons_per_layer[3] = {28*28, 30, 10};
     nn = create_ann(alpha, minibatch_size, number_of_layers, nneurons_per_layer);
-    //print_nn(nn);
+    // print_nn(nn);
 
     printf("starting accuracy %lf\n", accuracy(test_img, test_label, ntest, minibatch_size, nn));
 
@@ -126,7 +128,7 @@ int main(int argc, char *argv[])
     double *y = (double *) malloc(10 * minibatch_size * sizeof( double ));
     matrix_t *out = alloc_matrix(10, minibatch_size);
     
-    for (int epoch = 0; epoch < 1; epoch ++)
+    for (int epoch = 0; epoch < 10; epoch ++)
     {
         printf("start learning epoch %d\n", epoch);
 
@@ -135,9 +137,9 @@ int main(int argc, char *argv[])
         for (int i = 0; i < datasize - minibatch_size ; i+= minibatch_size)
         {
             populate_minibatch(x, y, shuffled_idx+i, minibatch_size, train_img, 28*28, train_label, 10);
-            memcpy(nn->layers[0]->activations->m, x, 28 * 28 * minibatch_size * sizeof(double));
+            CHECK_ERROR(cudaMemcpy(nn->layers[0]->activations->m, x, 28 * 28 * minibatch_size * sizeof(double), cudaMemcpyHostToDevice));
             forward(nn, sigmoid);
-            memcpy(out->m, y, 10 * minibatch_size * sizeof(double));            
+            CHECK_ERROR(cudaMemcpy(out->m, y, 10 * minibatch_size * sizeof(double), cudaMemcpyHostToDevice));            
             backward(nn, out, dsigmoid);            
         }     
         printf("epoch %d accuracy %lf\n", epoch, accuracy(test_img, test_label, ntest, minibatch_size, nn));

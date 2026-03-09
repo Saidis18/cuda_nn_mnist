@@ -78,7 +78,7 @@ layer_t * create_layer(unsigned layer_number, unsigned number_of_neurons, unsign
 
     if (layer_number > 0)
     {
-        init_weight(layer->weights, nneurons_previous_layer);
+        // init_weight(layer->weights, nneurons_previous_layer);
     }
 
     return layer;
@@ -124,8 +124,7 @@ void forward(ann_t *nn, double (*activation_function)(double))
         matrix_t *z1 = alloc_matrix(nn->layers[l]->number_of_neurons, nn->minibatch_size);
         matrix_t *z2 = alloc_matrix(nn->layers[l]->number_of_neurons, nn->minibatch_size);
         matrix_t *one = alloc_matrix(1, nn->minibatch_size);
-        for (int idx = 0; idx < one->columns*one->rows; idx++)
-            one->m[idx] = 1.0;
+        ones(one);
 
         matrix_dot(nn->layers[l]->weights, nn->layers[l-1]->activations, z1); // z1 <- w^l x a^(l-1)
         matrix_dot(nn->layers[l]->biases, one, z2); // z2 <- b^l x 1        
@@ -185,8 +184,7 @@ void backward(ann_t *nn, matrix_t *y, double (*derivative_actfunct)(double))
         matrix_t *one, *b1;
         b1 = alloc_matrix(nn->layers[l]->number_of_neurons, 1);
         one = alloc_matrix(nn->minibatch_size, 1);
-        for (int idx = 0; idx < one->columns*one->rows; idx++)
-            one->m[idx] = 1.0;
+        ones(one);
 
         matrix_dot(nn->layers[l]->delta, one, b1); // b1 <- delta^l x 1^T
         matrix_scalar(b1,  nn->alpha / nn->minibatch_size, b1); // b1 <- alpha / m . delta^l x 1^T

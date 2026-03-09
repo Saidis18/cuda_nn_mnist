@@ -1,14 +1,16 @@
 #include "matrix.h"
+#include "error.h"
 #include <stdlib.h>
 #include <string.h>
 
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
-matrix_t * alloc_matrix(unsigned rows, unsigned columns)
+matrix_t *alloc_matrix(unsigned rows, unsigned columns)
 {
-    matrix_t * res = (matrix_t*) malloc( sizeof(matrix_t) );
-    res->m = (double *) calloc(columns * rows, sizeof(double));
+    matrix_t *res;
+    res = (matrix_t *)malloc(sizeof(matrix_t));
+    CHECK_ERROR(cudaMalloc(&(res->m), columns * rows * sizeof(double)));
     res->columns = columns;
     res->rows = rows;
     return res;
@@ -16,14 +18,18 @@ matrix_t * alloc_matrix(unsigned rows, unsigned columns)
 
 void destroy_matrix(matrix_t *m)
 {
-    //printf("free %p %p\n", m, m->m);
-    free(m->m);
+    // printf("free %p %p\n", m, m->m);
+    CHECK_ERROR(cudaFree(m->m));
     free(m);
 }
 
-void print_matrix(matrix_t *m, bool is_short){
+void print_matrix(matrix_t *m, bool is_short)
+{
     unsigned lim_rows = 0;
     unsigned lim_col = 0;
+
+    double *h_m = (double *)malloc(m->columns * m->rows * sizeof(double));
+    CHECK_ERROR(cudaMemcpy(h_m, m->m, m->columns * m->rows * sizeof(double), cudaMemcpyDeviceToHost));
 
     if (is_short)
     {
@@ -36,120 +42,183 @@ void print_matrix(matrix_t *m, bool is_short){
         lim_col = m->columns;
     }
 
-    for (int row = 0; row < lim_rows; row ++)
+    for (int row = 0; row < lim_rows; row++)
     {
-        for (int col = 0; col < lim_col; col ++)
+        for (int col = 0; col < lim_col; col++)
         {
-            printf("%.2lf ", m->m[col + row * m->columns]);
+            printf("%.2lf ", h_m[col + row * m->columns]);
         }
-        if (is_short && lim_col != m->columns) printf("...");
+        if (is_short && lim_col != m->columns)
+            printf("...");
         printf("\n");
     }
-    if (is_short && lim_rows != m->rows) printf("...\n");
+    free(h_m);
+    if (is_short && lim_rows != m->rows)
+        printf("...\n");
+}
+
+__global__ void matrix_op_kernel(double *m1, double *m2, double *res, unsigned size, double (*op)(double, double))
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
+    {
+        res[idx] = op(m1[idx], m2[idx]);
+    }
 }
 
 void hadamard_product(matrix_t *m1, matrix_t *m2, matrix_t *res)
 {
-    assert ( (m1->columns == m2->columns)   &&
-             (m1->columns == res->columns)  &&
-             (m1->rows == m2->rows)         &&
-             (m1->rows == res->rows));
+    assert((m1->columns == m2->columns) &&
+           (m1->columns == res->columns) &&
+           (m1->rows == m2->rows) &&
+           (m1->rows == res->rows));
 
-    for (int idx = 0; idx < m1->rows * m1->columns; idx ++)
-    {
-            res->m[idx] = m1->m[idx] * m2->m[idx];
-    }
+    int size = m1->rows * m1->columns;
+    int block_size = 256;
+    int grid_size = (size + block_size - 1) / block_size;
+    matrix_op_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size, [](double a, double b)
+                                                { return a * b; });
 }
 
 void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res)
 {
-    assert ( (m1->columns == m2->columns)  &&
-             (m1->columns == res->columns) &&
-             (m1->rows == m2->rows)        &&
-             (m1->rows == res->rows));
+    assert((m1->columns == m2->columns) &&
+           (m1->columns == res->columns) &&
+           (m1->rows == m2->rows) &&
+           (m1->rows == res->rows));
 
-    for (int idx = 0; idx < m1->rows * m1->columns; idx ++)
-    { 
-        res->m[idx] = m1->m[idx] + m2->m[idx];
-    }
+    int size = m1->rows * m1->columns;
+    int block_size = 256;
+    int grid_size = (size + block_size - 1) / block_size;
+    matrix_op_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size, [](double a, double b)
+                                                { return a + b; });
 }
 
 void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
 {
-    assert ( (m1->columns == m2->columns)  &&
-             (m1->columns == res->columns) &&
-             (m1->rows == m2->rows)        &&
-             (m1->rows == res->rows));
-             
-    for (int idx = 0; idx < m1->rows * m1->columns; idx ++)
-    {
-        res->m[idx] = m1->m[idx] - m2->m[idx];
-    }
+    assert((m1->columns == m2->columns) &&
+           (m1->columns == res->columns) &&
+           (m1->rows == m2->rows) &&
+           (m1->rows == res->rows));
+
+    int size = m1->rows * m1->columns;
+    int block_size = 256;
+    int grid_size = (size + block_size - 1) / block_size;
+    matrix_op_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size, [](double a, double b)
+                                                { return a - b; });
 }
 
 void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
 {
-    assert ( (m1->columns == m2->rows)  &&
-             (m1->rows == res->rows)    &&
-             (m2->columns == res->columns));
+    assert((m1->columns == m2->rows) &&
+           (m1->rows == res->rows) &&
+           (m2->columns == res->columns));
 
-    for (int row = 0; row < m1->rows; row ++)
+    dim3 block_size(16, 16);
+    dim3 grid_size((res->columns + block_size.x - 1) / block_size.x, (res->rows + block_size.y - 1) / block_size.y);
+    matrix_dot_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, m1->rows, m1->columns, m2->columns);
+}
+
+__global__ void matrix_dot_kernel(double *m1, double *m2, double *res, unsigned m1_rows, unsigned m1_cols, unsigned m2_cols)
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < m1_rows && col < m2_cols)
     {
-        for (int col = 0; col < m2->columns; col ++)
+        int idx = col + row * m2_cols;
+        double var = 0.0;
+
+        for (int ii = 0; ii < m1_cols; ii++)
         {
-            int idx = col + row * m2->columns;
-            double var = 0.0;
-
-            for (int ii = 0; ii < m1->columns; ii++)
-            {
-                var += m1->m[ii + row * m1->columns] * m2->m[col + ii * m2->columns];
-            }
-
-            res->m[idx] = var;
+            var += m1[ii + row * m1_cols] * m2[col + ii * m2_cols];
         }
+
+        res[idx] = var;
     }
 }
 
 void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res)
 {
-    assert ( (m1->columns == res->columns) &&             
-             (m1->rows == res->rows));
+    assert((m1->columns == res->columns) &&
+           (m1->rows == res->rows));
 
-    for (int idx = 0; idx < m1->rows * m1->columns; idx ++)
+    int size = m1->rows * m1->columns;
+    int block_size = 256;
+    int grid_size = (size + block_size - 1) / block_size;
+    matrix_function_kernel<<<grid_size, block_size>>>(m1->m, f, res->m, size);
+}
+
+__global__ void matrix_function_kernel(double *m, double (*f)(double), double *res, unsigned size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
     {
-        res->m[idx] = f(m1->m[idx]);
+        res[idx] = f(m[idx]);
     }
 }
 
 void matrix_transpose(matrix_t *m1, matrix_t *res)
 {
-    assert ( (m1->columns == res->rows) &&             
-             (m1->rows == res->columns));
-    
-    for (int row = 0; row < m1->rows; row++)
+    assert((m1->columns == res->rows) &&
+           (m1->rows == res->columns));
+
+    dim3 block_size(16, 16);
+    dim3 grid_size((res->columns + block_size.x - 1) / block_size.x, (res->rows + block_size.y - 1) / block_size.y);
+    matrix_transpose_kernel<<<grid_size, block_size>>>(m1->m, res->m, m1->rows, m1->columns);
+}
+
+__global__ void matrix_transpose_kernel(double *m, double *res, unsigned rows, unsigned cols)
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < rows && col < cols)
     {
-        for (int col = 0; col < m1->columns; col ++)
-        {
-            res->m[row + col * m1->rows] = m1->m[col + row * m1->columns];
-        }
+        res[row + col * rows] = m[col + row * cols];
     }
 }
 
 void matrix_scalar(matrix_t *m1, double s, matrix_t *res)
 {
-    assert ( (m1->rows == res->rows) &&             
-             (m1->columns == res->columns));
+    assert((m1->rows == res->rows) &&
+           (m1->columns == res->columns));
 
-    for (int idx = 0; idx < m1->columns*m1->rows; idx ++)
+    int size = m1->rows * m1->columns;
+    int block_size = 256;
+    int grid_size = (size + block_size - 1) / block_size;
+    matrix_scalar_kernel<<<grid_size, block_size>>>(m1->m, s, res->m, size);
+}
+
+__global__ void matrix_scalar_kernel(double *m, double s, double *res, unsigned size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
     {
-        res->m[idx] = m1->m[idx] * s;
+        res[idx] = m[idx] * s;
     }
 }
 
 void matrix_memcpy(matrix_t *dest, const matrix_t *src)
 {
-    assert ( (dest->rows == src->rows)      &&             
-             (dest->columns == src->columns));
+    assert((dest->rows == src->rows) &&
+           (dest->columns == src->columns));
 
-    memcpy(dest->m, src->m, src->columns * src->rows * sizeof(double));     
+    CHECK_ERROR(cudaMemcpy(dest->m, src->m, src->columns * src->rows * sizeof(double), cudaMemcpyDeviceToDevice));
+}
+
+void ones(matrix_t *m)
+{
+    int size = m->rows * m->columns;
+    int block_size = 256;
+    int grid_size = (size + block_size - 1) / block_size;
+    ones_kernel<<<grid_size, block_size>>>(m->m, size);
+}
+
+__global__ void ones_kernel(double *m, unsigned size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)    {
+        m[idx] = 1.0;
+    }
 }
