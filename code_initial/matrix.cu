@@ -153,7 +153,7 @@ __global__ void matrix_dot_kernel(double *m1, double *m2, double *res, unsigned 
     }
 }
 
-void matrix_function(matrix_t *m1, __device__ double (*f)(double), matrix_t *res)
+void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res)
 {
     assert((m1->columns == res->columns) &&
            (m1->rows == res->rows));
@@ -164,7 +164,7 @@ void matrix_function(matrix_t *m1, __device__ double (*f)(double), matrix_t *res
     matrix_function_kernel<<<grid_size, block_size>>>(m1->m, f, res->m, size);
 }
 
-__global__ void matrix_function_kernel(double *m, __device__ double (*f)(double), double *res, unsigned size)
+__global__ void matrix_function_kernel(double *m, double (*f)(double), double *res, unsigned size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size)

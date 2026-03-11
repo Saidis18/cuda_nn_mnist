@@ -40,10 +40,13 @@ double normalRand(double mu, double sigma)
 
 void init_weight(matrix_t* w, unsigned nneurones_prev)
 {
+    double *m = (double*)malloc(w->columns * w->rows * sizeof(double));
     for (int idx = 0; idx < w->columns * w->rows; idx ++)
     {
-        w->m[idx] = normalRand(0, 1 / sqrt(nneurones_prev));
+        m[idx] = normalRand(0, 1 / sqrt(nneurones_prev));
     }
+    cudaMemcpy(w->m, m, w->columns * w->rows * sizeof(double), cudaMemcpyHostToDevice);
+    free(m);
 }
 
 ann_t * create_ann(double alpha, unsigned minibatch_size, unsigned number_of_layers, unsigned* nneurons_per_layer)
@@ -78,7 +81,7 @@ layer_t * create_layer(unsigned layer_number, unsigned number_of_neurons, unsign
 
     if (layer_number > 0)
     {
-        // init_weight(layer->weights, nneurons_previous_layer);
+        init_weight(layer->weights, nneurons_previous_layer);
     }
 
     return layer;

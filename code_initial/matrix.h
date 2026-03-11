@@ -26,7 +26,7 @@ void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res);
 
 void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res);
 
-void matrix_function(matrix_t *m1, __device__ double (*f)(double), matrix_t *res);
+void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res);
 
 void matrix_transpose(matrix_t *m1, matrix_t *res);
 
@@ -48,7 +48,7 @@ __global__ void matrix_transpose_kernel(double *m, double *res, unsigned rows, u
 
 __global__ void matrix_scalar_kernel(double *m, double s, double *res, unsigned size);
 
-__global__ void matrix_function_kernel(double *m, __device__ double (*f)(double), double *res, unsigned size);
+__global__ void matrix_function_kernel(double *m, double (*f)(double), double *res, unsigned size);
 
 __global__ void ones_kernel(double *m, unsigned size);
 
