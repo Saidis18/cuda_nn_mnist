@@ -3,7 +3,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-
 #include "mnist.h"
 #include "matrix.h"
 #include "ann.h"
@@ -35,15 +34,18 @@ void shuffle(unsigned *t, const unsigned size, const unsigned number_of_switch)
     }
 }
 
-__device__ double sigmoid(double x)
+__device__ double h_sigmoid(double x)
 {
     return 1 / (1 + exp(-x));
 }
 
-__device__ double dsigmoid(double x)
+__device__ double h_dsigmoid(double x)
 {
-    return sigmoid(x)*(1-sigmoid(x));
+    return h_sigmoid(x)*(1-h_sigmoid(x));
 }
+
+__device__ double (*d_sigmoid)(double) = h_sigmoid;
+__device__ double (*d_dsigmoid)(double) = h_dsigmoid;
 
 double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned minibatch_size, ann_t *nn)
 {
@@ -51,6 +53,10 @@ double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned m
     unsigned idx[datasize];    
     double *x = (double *) malloc( 28 * 28 * minibatch_size * sizeof(double));
     double *y = (double *) malloc( 10 * minibatch_size * sizeof(double) );
+    double (*sigmoid)(double);
+    double (*dsigmoid)(double);
+    CHECK_ERROR(cudaMemcpyFromSymbol(&sigmoid, d_sigmoid, sizeof(double (*)(double))));
+    CHECK_ERROR(cudaMemcpyFromSymbol(&dsigmoid, d_dsigmoid, sizeof(double (*)(double))));
 
     zero_to_n(datasize, idx);
     
@@ -112,6 +118,10 @@ int main(int argc, char *argv[])
     byte* train_label = read_labels("dataset/train-labels-idx1-ubyte", &datasize);
     image* test_img = read_images("dataset/t10k-images-idx3-ubyte", &ntest);
     byte* test_label = read_labels("dataset/t10k-labels-idx1-ubyte", &ntest);
+    double (*sigmoid)(double);
+    double (*dsigmoid)(double);
+    CHECK_ERROR(cudaMemcpyFromSymbol(&sigmoid, d_sigmoid, sizeof(double (*)(double))));
+    CHECK_ERROR(cudaMemcpyFromSymbol(&dsigmoid, d_dsigmoid, sizeof(double (*)(double))));
 
     ann_t * nn;
     double alpha = 0.05;

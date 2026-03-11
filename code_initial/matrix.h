@@ -26,7 +26,7 @@ void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res);
 
 void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res);
 
-void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res);
+void matrix_function(matrix_t *m1, __device__ double (*f)(double), matrix_t *res);
 
 void matrix_transpose(matrix_t *m1, matrix_t *res);
 
@@ -36,7 +36,11 @@ void ones(matrix_t *m);
 
 void matrix_memcpy(matrix_t *dest, const matrix_t *src);
 
-__global__ void matrix_op_kernel(double *m1, double *m2, double*res, unsigned size, double (*op)(double, double));
+__global__ void hadamard_product_kernel(double *m1, double *m2, double*res, unsigned size);
+
+__global__ void matrix_sum_kernel(double *m1, double *m2, double*res, unsigned size);
+
+__global__ void matrix_minus_kernel(double *m1, double *m2, double*res, unsigned size);
 
 __global__ void matrix_dot_kernel(double *m1, double *m2, double *res, unsigned m1_rows, unsigned m1_cols, unsigned m2_cols);
 
@@ -44,7 +48,7 @@ __global__ void matrix_transpose_kernel(double *m, double *res, unsigned rows, u
 
 __global__ void matrix_scalar_kernel(double *m, double s, double *res, unsigned size);
 
-__global__ void matrix_function_kernel(double *m, double (*f)(double), double *res, unsigned size);
+__global__ void matrix_function_kernel(double *m, __device__ double (*f)(double), double *res, unsigned size);
 
 __global__ void ones_kernel(double *m, unsigned size);
 

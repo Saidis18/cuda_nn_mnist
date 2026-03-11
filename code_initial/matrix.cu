@@ -57,15 +57,6 @@ void print_matrix(matrix_t *m, bool is_short)
         printf("...\n");
 }
 
-__global__ void matrix_op_kernel(double *m1, double *m2, double *res, unsigned size, double (*op)(double, double))
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < size)
-    {
-        res[idx] = op(m1[idx], m2[idx]);
-    }
-}
-
 void hadamard_product(matrix_t *m1, matrix_t *m2, matrix_t *res)
 {
     assert((m1->columns == m2->columns) &&
@@ -76,8 +67,16 @@ void hadamard_product(matrix_t *m1, matrix_t *m2, matrix_t *res)
     int size = m1->rows * m1->columns;
     int block_size = 256;
     int grid_size = (size + block_size - 1) / block_size;
-    matrix_op_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size, [](double a, double b)
-                                                { return a * b; });
+    hadamard_product_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size);
+}
+
+__global__ void hadamard_product_kernel(double *m1, double *m2, double *res, unsigned size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
+    {
+        res[idx] = m1[idx] * m2[idx];
+    }
 }
 
 void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res)
@@ -90,8 +89,16 @@ void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res)
     int size = m1->rows * m1->columns;
     int block_size = 256;
     int grid_size = (size + block_size - 1) / block_size;
-    matrix_op_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size, [](double a, double b)
-                                                { return a + b; });
+    matrix_sum_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size);
+}
+
+__global__ void matrix_sum_kernel(double *m1, double *m2, double *res, unsigned size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
+    {
+        res[idx] = m1[idx] + m2[idx];
+    }
 }
 
 void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
@@ -104,8 +111,16 @@ void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
     int size = m1->rows * m1->columns;
     int block_size = 256;
     int grid_size = (size + block_size - 1) / block_size;
-    matrix_op_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size, [](double a, double b)
-                                                { return a - b; });
+    matrix_minus_kernel<<<grid_size, block_size>>>(m1->m, m2->m, res->m, size);
+}
+
+__global__ void matrix_minus_kernel(double *m1, double *m2, double *res, unsigned size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size)
+    {
+        res[idx] = m1[idx] - m2[idx];
+    }
 }
 
 void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
@@ -138,7 +153,7 @@ __global__ void matrix_dot_kernel(double *m1, double *m2, double *res, unsigned 
     }
 }
 
-void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res)
+void matrix_function(matrix_t *m1, __device__ double (*f)(double), matrix_t *res)
 {
     assert((m1->columns == res->columns) &&
            (m1->rows == res->rows));
@@ -149,7 +164,7 @@ void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res)
     matrix_function_kernel<<<grid_size, block_size>>>(m1->m, f, res->m, size);
 }
 
-__global__ void matrix_function_kernel(double *m, double (*f)(double), double *res, unsigned size)
+__global__ void matrix_function_kernel(double *m, __device__ double (*f)(double), double *res, unsigned size)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size)
