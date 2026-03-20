@@ -44,4 +44,8 @@ __global__ void forward_kernel(double *weights, double *activations_prev, double
 
 void backward(ann_t *nn, matrix_t *y, double (*derivative_actfunct)(double));
 
+__global__ void fst_backward_kernel(double *weights, double *delta_next, double *z_prev, double *delta_prev, unsigned nneurons_prev, unsigned nneurons_next, unsigned minibatch_size, double (*derivative_actfunct)(double));
+
+__global__ void sgd_update_kernel(double *weights, double *biases, const double *delta, const double *activations_prev, unsigned nneurons, unsigned nneurons_prev, unsigned minibatch_size, double alpha);
+
 #endif

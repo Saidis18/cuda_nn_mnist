@@ -175,45 +175,83 @@ void backward(ann_t *nn, matrix_t *y, double (*derivative_actfunct)(double))
 
     for (int l = L; l > 1; l--)
     {
-        matrix_t *tw, *delta_tmp, *dfz;
-        tw = alloc_matrix(nn->layers[l-1]->number_of_neurons, nn->layers[l]->number_of_neurons);
-        delta_tmp = alloc_matrix(nn->layers[l-1]->number_of_neurons, nn->minibatch_size);
-        dfz = alloc_matrix(nn->layers[l-1]->number_of_neurons, nn->minibatch_size);
-
-        matrix_transpose(nn->layers[l]->weights, tw); // (w^l)T        
-        matrix_dot(tw, nn->layers[l]->delta, delta_tmp); // (w^l)T x delta^l
-        matrix_function(nn->layers[l-1]->z, derivative_actfunct, dfz); // f'(z^(l-1))
-        hadamard_product(delta_tmp, dfz, nn->layers[l-1]->delta); // delta^(l-1) = (w^l)T x delta^l o f'(z^(l-1))
-
-        destroy_matrix(tw);
-        destroy_matrix(delta_tmp);
-        destroy_matrix(dfz);
+        unsigned nneurons_prev = nn->layers[l-1]->number_of_neurons;
+        unsigned nneurons_next = nn->layers[l]->number_of_neurons;
+        unsigned size = nneurons_prev * nn->minibatch_size;
+        fst_backward_kernel<<<(size + 255) / 256, 256>>>(
+            nn->layers[l]->weights->m,
+            nn->layers[l]->delta->m,
+            nn->layers[l-1]->z->m,
+            nn->layers[l-1]->delta->m,
+            nneurons_prev,
+            nneurons_next,
+            nn->minibatch_size,
+            derivative_actfunct
+        );
     }
 
     for (int l = 1; l < nn->number_of_layers; l++)
     {
-        matrix_t *w1, *ta;
-        w1 = alloc_matrix(nn->layers[l]->number_of_neurons, nn->layers[l-1]->number_of_neurons);
-        ta = alloc_matrix(nn->minibatch_size, nn->layers[l-1]->number_of_neurons);
-        
-        matrix_transpose(nn->layers[l-1]->activations, ta); // ta <- (a^(l-1))^T
-        matrix_dot(nn->layers[l]->delta, ta, w1); // w1 <- delta^l x (a^(l-1))^T
-        matrix_scalar(w1, nn->alpha / nn->minibatch_size, w1); // w1 <- alpha /m . delta^l x (a^(l-1))^T
-        matrix_minus(nn->layers[l]->weights, w1, nn->layers[l]->weights); // w^l <- w^l - alpha /m . delta^l x (a^(l-1))^T
+        unsigned nneurons = nn->layers[l]->number_of_neurons;
+        unsigned nneurons_prev = nn->layers[l-1]->number_of_neurons;
+        unsigned total = nneurons * nneurons_prev;
 
-        destroy_matrix(w1);
-        destroy_matrix(ta);
+        sgd_update_kernel<<<(total + 255) / 256, 256>>>(
+            nn->layers[l]->weights->m,
+            nn->layers[l]->biases->m,
+            nn->layers[l]->delta->m,
+            nn->layers[l-1]->activations->m,
+            nneurons,
+            nneurons_prev,
+            nn->minibatch_size,
+            nn->alpha
+        );
+    }
+}
 
-        matrix_t *one, *b1;
-        b1 = alloc_matrix(nn->layers[l]->number_of_neurons, 1);
-        one = alloc_matrix(nn->minibatch_size, 1);
-        ones(one);
+__global__
+void fst_backward_kernel(double *weights, double *delta_next, double *z_prev, double *delta_prev, unsigned nneurons_prev, unsigned nneurons_next, unsigned minibatch_size, double (*derivative_actfunct)(double))
+{
+    unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < nneurons_prev * minibatch_size)
+    {
+        unsigned i = idx / minibatch_size;
+        unsigned j = idx % minibatch_size;
 
-        matrix_dot(nn->layers[l]->delta, one, b1); // b1 <- delta^l x 1^T
-        matrix_scalar(b1,  nn->alpha / nn->minibatch_size, b1); // b1 <- alpha / m . delta^l x 1^T
-        matrix_minus(nn->layers[l]->biases, b1, nn->layers[l]->biases); // b^l = b^l - alpha / m . delta^l x 1^T
-        
-        destroy_matrix(one);
-        destroy_matrix(b1);
+        double acc = 0.0;
+        for (unsigned k = 0; k < nneurons_next; k++)
+        {
+            acc += weights[k * nneurons_prev + i] * delta_next[k * minibatch_size + j];
+        }
+        delta_prev[idx] = acc * derivative_actfunct(z_prev[idx]);
+    }
+}
+
+__global__
+void sgd_update_kernel(double *weights, double *biases, const double *delta, const double *activations_prev, unsigned nneurons, unsigned nneurons_prev, unsigned minibatch_size, double alpha)
+{
+    unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned total = nneurons * nneurons_prev;
+    if (idx < total)
+    {
+        unsigned i = idx / nneurons_prev;
+        unsigned k = idx % nneurons_prev;
+
+        double acc_w = 0.0;
+        for (unsigned j = 0; j < minibatch_size; j++)
+        {
+            acc_w += delta[i * minibatch_size + j] * activations_prev[k * minibatch_size + j];
+        }
+        weights[i * nneurons_prev + k] -= (alpha / minibatch_size) * acc_w;
+
+        if (k == 0)
+        {
+            double acc_b = 0.0;
+            for (unsigned j = 0; j < minibatch_size; j++)
+            {
+                acc_b += delta[i * minibatch_size + j];
+            }
+            biases[i] -= (alpha / minibatch_size) * acc_b;
+        }
     }
 }
