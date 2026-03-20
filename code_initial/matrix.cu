@@ -179,7 +179,7 @@ void matrix_transpose(matrix_t *m1, matrix_t *res)
            (m1->rows == res->columns));
 
     dim3 block_size(16, 16);
-    dim3 grid_size((res->columns + block_size.x - 1) / block_size.x, (res->rows + block_size.y - 1) / block_size.y);
+    dim3 grid_size((m1->columns + block_size.x - 1) / block_size.x, (m1->rows + block_size.y - 1) / block_size.y);
     matrix_transpose_kernel<<<grid_size, block_size>>>(m1->m, res->m, m1->rows, m1->columns);
 }
 
