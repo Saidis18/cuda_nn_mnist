@@ -120,24 +120,44 @@ void print_nn(ann_t *nn)
     }
 }
 
-void forward(ann_t *nn, double (*activation_function)(double))
+void forward(ann_t *nn)
 {
     for (int l = 1; l < nn->number_of_layers; l++)
     {
-        matrix_t *z1 = alloc_matrix(nn->layers[l]->number_of_neurons, nn->minibatch_size);
-        matrix_t *z2 = alloc_matrix(nn->layers[l]->number_of_neurons, nn->minibatch_size);
-        matrix_t *one = alloc_matrix(1, nn->minibatch_size);
-        ones(one);
-
-        matrix_dot(nn->layers[l]->weights, nn->layers[l-1]->activations, z1); // z1 <- w^l x a^(l-1)
-        matrix_dot(nn->layers[l]->biases, one, z2); // z2 <- b^l x 1        
-        matrix_sum(z1, z2, nn->layers[l]->z); // z^l <- z1 + z2 <=> z^l <- w^l x a^(l-1) + b^l x 1      
-
-        matrix_function(nn->layers[l]->z, activation_function, nn->layers[l]->activations); // a^l = f(z^l)
+        matrix_t *z = alloc_matrix(nn->layers[l]->number_of_neurons, nn->minibatch_size);
+        
+        forward_kernel<<<(nn->layers[l]->number_of_neurons * nn->minibatch_size + 255) / 256, 256>>>(
+            nn->layers[l]->weights->m, 
+            nn->layers[l-1]->activations->m, 
+            nn->layers[l]->biases->m, 
+            z->m, 
+            nn->layers[l]->activations->m, 
+            nn->layers[l]->number_of_neurons, 
+            nn->layers[l-1]->number_of_neurons, 
+            nn->minibatch_size
+        );
      
-        destroy_matrix(z1);
-        destroy_matrix(z2);
-        destroy_matrix(one);
+        destroy_matrix(z);
+    }
+}
+
+__global__
+void forward_kernel(double *weights, double *activations_prev, double *biases, double *z, double *activations, unsigned nneurons, unsigned nneurons_prev, unsigned minibatch_size)
+{
+    unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < nneurons * minibatch_size)
+    {
+        unsigned i = idx / minibatch_size;
+        unsigned j = idx % minibatch_size;
+
+        double z_ij = 0.0;
+        for (int k = 0; k < nneurons_prev; k++)
+        {
+            z_ij += weights[i * nneurons_prev + k] * activations_prev[k * minibatch_size + j];
+        }
+        z_ij += biases[i];
+        z[idx] = z_ij;
+        activations[idx] = 1.0 / (1.0 + exp(-z_ij));
     }
 }
 

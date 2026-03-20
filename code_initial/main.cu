@@ -65,7 +65,7 @@ double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned m
         populate_minibatch(x, y, &idx[i], minibatch_size, test_img, 28*28, test_label, 10);
         CHECK_ERROR(cudaMemcpy(nn->layers[0]->activations->m, x, 28*28 * minibatch_size * sizeof(double), cudaMemcpyHostToDevice));     
         
-        forward(nn, sigmoid);
+        forward(nn);
         CHECK_ERROR(cudaMemcpy(y, nn->layers[nn->number_of_layers-1]->activations->m, 10 * minibatch_size * sizeof(double), cudaMemcpyDeviceToHost));
         for (int col = 0; col < minibatch_size; col ++)
         {
@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
         {
             populate_minibatch(x, y, shuffled_idx+i, minibatch_size, train_img, 28*28, train_label, 10);
             CHECK_ERROR(cudaMemcpy(nn->layers[0]->activations->m, x, 28 * 28 * minibatch_size * sizeof(double), cudaMemcpyHostToDevice));
-            forward(nn, sigmoid);
+            forward(nn);
             CHECK_ERROR(cudaMemcpy(out->m, y, 10 * minibatch_size * sizeof(double), cudaMemcpyHostToDevice));            
             backward(nn, out, dsigmoid);            
         }     

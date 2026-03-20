@@ -38,7 +38,9 @@ void set_input(ann_t *nn, matrix_t* input);
 
 void print_nn(ann_t *nn);
 
-void forward(ann_t *nn, double (*activation_function)(double));
+void forward(ann_t *nn);
+
+__global__ void forward_kernel(double *weights, double *activations_prev, double *biases, double *z, double *activations, unsigned nneurons, unsigned nneurons_prev, unsigned minibatch_size);
 
 void backward(ann_t *nn, matrix_t *y, double (*derivative_actfunct)(double));
 
