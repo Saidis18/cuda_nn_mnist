@@ -13,6 +13,13 @@
 
 void populate_minibatch(double *x, double* y, unsigned* minibatch_idx, unsigned minibatch_size, image * img, unsigned img_size, byte* label, unsigned label_size);
 
+static double monotonic_seconds()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+}
+
 void zero_to_n(unsigned n, unsigned* t)
 {
     for (unsigned i = 0; i < n; i++)
@@ -140,6 +147,7 @@ int main(int argc, char *argv[])
     
     for (int epoch = 0; epoch < 10; epoch ++)
     {
+        double epoch_start = monotonic_seconds();
         printf("start learning epoch %d\n", epoch);
 
         shuffle(shuffled_idx, datasize, datasize);
@@ -152,7 +160,10 @@ int main(int argc, char *argv[])
             CHECK_ERROR(cudaMemcpy(out->m, y, 10 * minibatch_size * sizeof(double), cudaMemcpyHostToDevice));            
             backward(nn, out, dsigmoid);            
         }     
-        printf("epoch %d accuracy %lf\n", epoch, accuracy(test_img, test_label, ntest, minibatch_size, nn));
+
+        CHECK_ERROR(cudaDeviceSynchronize());
+        double epoch_end = monotonic_seconds();
+        printf("epoch %d accuracy %lf, in %lf s\n", epoch, accuracy(test_img, test_label, ntest, minibatch_size, nn), epoch_end - epoch_start);
     }
 
     free(x);
